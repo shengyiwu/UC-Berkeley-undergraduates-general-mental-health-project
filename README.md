@@ -1,4 +1,5 @@
-# UC Berkeley undergraduates general mental ealth project
+# UC Berkeley Undergraduates General Mental Health Project
+## Shengyi Wu
 ## Introduction:
 Throughout my two years in college, more and more students around me say that they are
 suffering mental health problems such as anxiety, depression, bulimia, and obsessive-compulsive
@@ -9,3 +10,9 @@ any mental health services on campus, the responses that I got were consistent: 
 research, I investigated UC Berkeley undergraduates’ general mental health condition and the use
 of on campus mental health resources. Using data collected through a questionnaire, I analyzed
 students’ general mental health and why they don’t use mental health services.
+
+## Files:
+raw_response: original response data
+cleaned_data: cleaned response data
+paper: final result report
+code: R code file 

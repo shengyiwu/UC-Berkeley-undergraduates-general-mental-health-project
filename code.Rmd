@@ -1,0 +1,167 @@
+---
+title: "UC Berkeley Undergraduate Students' Mental Health Assessment & Related On-Campus Services Project"
+output: html_notebook
+---
+```{r}
+library(googlesheets)
+library(dplyr)
+library(magrittr)
+library(lubridate)
+library(ggplot2)
+library(tidyr)
+```
+
+Read Google-Sheet:
+```{r}
+gs_title("UC Berkeley Undergraduate Students' Mental Health Assessment & Related On-Campus Services Questionnaire (Responses)") %>% 
+  gs_read() -> questionnaire
+```
+
+Data cleaning and transformation:
+```{r}
+questionnaire %>%
+  mutate(Timestamp = mdy_hms(Timestamp),
+         Year = 
+           factor(`1.Year:`, levels = 
+          c("Freshman", "Sophomore","Junior","Senior"), ordered = T),
+         Gender = as.factor(`2. Gender:`),
+         `Major 1` = recode(`3. Major / Majors:`, `Computer Science` = "CS"),
+         `Major 2`= Major2, `Major 3` = Major3,
+         Ethnicity = `4. Ethnicity:`,
+         Units = factor(`5. How many units are you taking this semester?`, 
+                        levels = c("Under 16","16-20","Over 20"), ordered = T),
+         `Academic Work Satisfaction` = factor(`6. How satisfied are you with your academic work?`, 
+                                               levels = c("Extremely Dissatisfied","Dissatisfied","Neutral","Satisfied","Extremely Satisfied"), 
+                                               ordered = T),
+         `Personal Life Satisfaction` = factor(`7. How satisfied are you with your personal life?`, 
+                                               levels = c("Extremely Dissatisfied","Dissatisfied","Neutral","Satisfied","Extremely Satisfied"),
+                                               ordered = T),
+         `Relax` = factor(`8. How do you agree with the following statement? “I find it difficult to relax.”`, 
+                          levels = c("Does not apply to me at all","Applies to me to some degree, or some of the time",
+                                     "Applies to me to a considerable degree, or a great part of time","Apply to me very much, or most of time") %>% 
+                            rev, ordered = T),
+         `Overwhelmed` = factor(`9. Have you ever felt overwhelmed by all you have to do?`, 
+                                levels = c("Yes, in the last 2 weeks","Yes, in the last 30 days","Yes, in the last 12 months",
+                                           "No, not in the last 12 months","No, never"), ordered = T),
+         `Comfortableness` = factor(`11. Are you comfortable with your present level of stress?`, levels = c("Yes","Maybe","No"),ordered = T),
+         `Effectiveness` = factor(
+           `15. If you have ever tried any academic and mental health services, how would you rate their effectiveness of solving your problems?`, 
+           levels = c("Very effective","Effective","Neutral","Ineffective","Extremely ineffective","I have never tried any services"), ordered = T) %>%
+           recode_factor(`Very effective` = "Extremely effective"),
+         `Adequacy` = 
+           factor(`16. How would you rate the adequacy of the academic and mental health services on campus?`,
+                  levels = c("Very adequate","Adequate","Neutral","Inadequate","Extremely Inadequate",
+                             "\bI have never tried any services"), ordered = T) %>% 
+           recode_factor(`Very adequate` = "Extremely adequate", 
+                         `\bI have never tried any services` = "I have never tried any services"), 
+         ID = 1:n()) %>% 
+  unnest(`10` = strsplit(
+    `10. Within the last 6 months, do you feel like any of the following have been traumatic or very difficult to handle (Choose all that apply):`, ", ")) %>%
+  arrange(`10`) %>% mutate(`10` = paste("Trauma:", `10`), Trauma = T) %>% spread(`10`, Trauma, fill = F) %>% unnest(`12` = strsplit(`12. Within the last 12 months, have you been diagnosed or treated by a professional for the following (Choose all that apply):`, ", ")) %>% arrange(`12`) %>% mutate(`12` = recode(`12`, `Eating disorder` = "Eating Disorder") %>% paste("Disorder:", .), Disorder = T) %>% spread(`12`, Disorder, fill = F) %>% 
+  unnest(`13` = strsplit(`13. Do you enjoy and actively participate in any of the following? (Choose all that apply):`, ", ")) %>% arrange(`13`) %>% mutate(`13` = recode(`13`, `No` = "N/A", `Playing computer games` = "Playing games", `Video Games` = "Playing games", `Talking shit` = "Travelling") %>% paste("Activity:", .), Activity =T) %>% spread(`13`, Activity, fill = F) %>%
+  unnest(`14` = strsplit(`14. Have you ever taken advantage of on campus mental health services? (Choose all that apply):`, ", ")) %>% arrange(`14`) %>% mutate(`14` = recode(`14`, `No` = "N/A",`Jojo the dog in sproul` = "Pet Hugs event by University Health Service", `Therapist outside of Tang` = "Therapist outside of Tang Center",`Residence Hall Psychologist` = "Health workers in residence halls", `psychiatrist in tang` = "Psychiatrist in Tang Center") %>% paste("Service:", .), Service = T) %>% spread(`14`, Service, fill = F) %>%
+  select(ID, Year, Gender, Ethnicity, starts_with("Major"), `Units`, `Academic Work Satisfaction`, `Personal Life Satisfaction`, Relax, Overwhelmed, Comfortableness, starts_with("Trauma"), starts_with("Disorder"), starts_with("Activity"), starts_with("Service"), Effectiveness, Adequacy) ->
+  cleaned_questionnaire
+
+#write.csv(cleaned_questionnaire, "cleaned_questionnaire.csv")
+head(cleaned_questionnaire)
+```
+
+Summary of proportion of participants who experience different kinds of traumas and who are diagnosed with mental illness:
+```{r}
+cleaned_questionnaire %>% group_by(Year) %>% summarise_at(vars(starts_with("Trauma:")), funs(sum(.)/n())) -> trauma_proportions
+trauma_proportions
+
+cleaned_questionnaire %>% group_by(Year) %>% summarise_at(vars(starts_with("Disorder:")), funs(sum(.)/n())) -> disorder_proportions
+disorder_proportions
+```
+
+Graphing:
+```{r}
+cleaned_questionnaire %>% select(starts_with("Trauma:"), Effectiveness) %>%
+  gather(`Trauma Type`, `Trauma?`, starts_with("Trauma:")) %>%
+  mutate(`Trauma Type` = sub("Trauma: ", "", `Trauma Type`)) %>% 
+  filter(`Trauma?`, `Trauma Type` != "N/A") %>% select(`Trauma Type`, Effectiveness) %>%
+  filter(Effectiveness != "I have never tried any services", ! `Trauma Type` %in% c("Drug/Alcohol abuse", "Housing issues")) %>%
+  ggplot(aes(reorder(`Trauma Type`, `Trauma Type`, function(x)- length(x)), fill = Effectiveness)) + geom_bar(position = "fill") + scale_y_continuous(labels = scales::percent) + 
+  labs(y = "Proportion of Effectiveness Rating", x = "Type of Difficulty", 
+       title = "Proportion of Effectiveness Rating by UC Berkeley Undergraduate Students Facing Difficulties", 
+       fill = "Effectiveness") + 
+  theme(legend.position = "right", 
+        plot.title = element_text(hjust = 0.5, size = 20), 
+        axis.title = element_text(size = 15),
+        axis.text.x = element_text(size = 15, angle = 45, vjust = 0.5),
+        axis.text.y = element_text(size = 15),
+        legend.text = element_text(size = 15),
+        legend.title = element_text(size = 15))
+  
+cleaned_questionnaire %>% select(starts_with("Trauma:"), Effectiveness) %>%
+  gather(`Trauma Type`, `Trauma?`, starts_with("Trauma:")) %>%
+  mutate(`Trauma Type` = sub("Trauma: ", "", `Trauma Type`)) %>% 
+  filter(`Trauma?`, `Trauma Type` != "N/A") %>% select(`Trauma Type`, Effectiveness) %>%
+  filter(Effectiveness != "I have never tried any services") %>%
+  group_by(`Trauma Type`, Effectiveness) %>% tally %>%
+  ungroup() %>% group_by(`Trauma Type`) %>% mutate(Proportion = n / sum(n))
+  
+cleaned_questionnaire %>% group_by(Year) %>% summarise_at(vars(starts_with("Disorder:")), funs(sum(.)/n())) -> disorder_proportions
+```
+
+
+```{r}
+cleaned_questionnaire %>% select(starts_with("Trauma:"), starts_with("Service:")) %>% 
+  gather(`Trauma Type`, `Trauma?`, starts_with("Trauma:")) %>% 
+  mutate(`Trauma Type` = sub("Trauma: ", "", `Trauma Type`)) %>% 
+  gather(`Service Type`, `Used Service?`, starts_with("Service:")) %>%
+  mutate(`Service Type` = sub("Service: ", "", `Service Type`)) %>% 
+  filter(`Trauma?`, `Trauma Type` != "N/A") -> trauma_service
+
+#ggthemr("flat")
+trauma_service %>% transmute(`Trauma Type`, `Service` = recode(`Service Type`, `N/A` = F, .default = T) %>%
+                            `&`(`Used Service?`)) %>% 
+  ggplot(aes(reorder(`Trauma Type`, `Trauma Type`, function(x)- length(x)), fill = Service)) + 
+  geom_bar(position = "stack") + 
+  scale_y_continuous(labels = function(x){floor(x/14)}) + 
+  labs(y = "Number of Students", x = "Type of Difficulty", 
+       title = "Use of Health Services by UC Berkeley Undergraduate Students Facing Difficulties", 
+       fill = "Used a health service?") + 
+  theme(legend.position = "right", 
+        plot.title = element_text(hjust = 0.5, size = 20), 
+        axis.title = element_text(size = 15),
+        axis.text.x = element_text(size = 15, angle = 45, vjust = 0.5),
+        axis.text.y = element_text(size = 15),
+        legend.text = element_text(size = 15),
+        legend.title = element_text(size = 15))
+
+trauma_service %>% transmute(`Trauma Type`, `Service` = recode(`Service Type`, `N/A` = F, .default = T) %>%
+                            `&`(`Used Service?`)) %>% 
+  group_by(`Trauma Type`, `Service`) %>% tally() %>% mutate(`Count` = floor(n/14)) %>% select(- n) 
+```
+
+
+```{r}
+cleaned_questionnaire %>% select(ID, starts_with("Activity:"), starts_with("Service:")) %>%
+  gather(`Activity Type`, `Activity?`, starts_with("Activity:")) %>% 
+  mutate(`Activity Type` = sub("Activity: ", "", `Activity Type`)) %>% 
+  gather(`Service Type`, `Used Service?`, starts_with("Service:")) %>%
+  mutate(`Service Type` = sub("Service: ", "", `Service Type`)) %>% 
+  filter(`Activity?`, `Activity Type` != "N/A") %>% 
+  mutate(`Social?` = recode(`Activity Type`,
+                                  `Attending Church` = T,
+                                  `Joining clubs` = T,
+                                  `Talking to friends or families` = T,
+                                  .default = F)) %>% 
+  group_by(ID, `Service Type`, `Used Service?`) %>% summarise(`Social?` = (sum(`Social?`) > 0)) %>% 
+  mutate(`Used a Service?` = recode(`Service Type`, `N/A` = F, .default = T) %>% `&`(`Used Service?`)) %>% 
+  filter(`Used a Service?`) %>% select(ID, `Used This Service` = `Service Type`, `Social?`) %>% 
+  mutate(`Social Service?` = recode(`Used This Service`,
+                                 `\"Let's Talk\" activity in Satellite offices of Tang Center` = T,
+                                 `Career Counseling Library by Tang Center` = T,
+                                 `Drop-in counseling by Tang Center` = T,
+                                 `Health workers in residence halls` = T,
+                                 `Peer counseling by Student to Student Peer Counseling` = T,
+                                 `Phone consultation by Tang Center` = T,
+                                 `Short-term individual counseling by Tang Center` = T,
+                                 .default = F)) %>% 
+  ggplot(aes(`Social?`, fill = `Social Service?`)) + geom_bar(position = "fill")
+
+```

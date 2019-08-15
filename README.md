@@ -12,7 +12,10 @@ of on campus mental health resources. Using data collected through a questionnai
 students’ general mental health and why they don’t use mental health services.
 
 ## Files:
-raw_response: original response data
-cleaned_data: cleaned response data
-paper: final result report
+raw_response: original response data 
+
+cleaned_data: cleaned response data 
+
+paper: final result report 
+
 code: R code file 
